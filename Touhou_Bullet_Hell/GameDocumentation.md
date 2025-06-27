@@ -95,12 +95,13 @@ class Player {
 ```javascript
 setupByType(type) {
     switch(type) {
-        case 'normal':   // 普通敌人
-        case 'fast':     // 快速敌人
-        case 'heavy':    // 重型敌人
-        case 'sniper':   // 狙击手
-        case 'bomber':   // 轰炸机
-        case 'boss':     // Boss
+        case 'normal':     // 普通敌人
+        case 'fast':       // 快速敌人
+        case 'heavy':      // 重型敌人
+        case 'sniper':     // 狙击手
+        case 'bomber':     // 轰炸机
+        case 'boss':       // 普通Boss (已移除)
+        case 'super_boss': // 超级Boss (关底Boss)
     }
 }
 ```
@@ -112,12 +113,14 @@ setupByType(type) {
 - `circle`: 圆形移动
 - `hover`: 悬停模式
 - `boss`: Boss特殊移动
+- `super_boss`: 超级Boss移动模式 (不退场，在屏幕上方活动)
 
 #### 射击模式
 - 普通射击: 追踪玩家
 - 散射射击: 多发散射
 - 环形射击: 360度环形弹幕
 - Boss弹幕: 旋转弹幕
+- 超级Boss弹幕: 大量旋转弹幕 + 追踪弹幕组合
 
 ### 3. PlayerBullet 类
 **职责**: 玩家子弹的物理和渲染
@@ -145,6 +148,8 @@ class PlayerBullet {
 - `sniper`: 狙击弹幕
 - `bomb`: 爆炸弹幕
 - `fast`: 快速弹幕
+- `super_boss`: 超级Boss弹幕
+- `super_boss_tracking`: 超级Boss追踪弹幕
 
 ### 5. Particle 类
 **职责**: 爆炸和特效粒子
@@ -251,11 +256,10 @@ checkHealthPurchase() {
 ```
 
 ### 3. 关卡进度系统
-- 每关需要击杀指定数量敌人
-- 关卡1: 50个敌人
-- 关卡2: 65个敌人 (+15)
-- 关卡3: 80个敌人 (+15)
-- 以此类推...
+- 每关时长固定90秒
+- 前75秒：生成各种精英敌人
+- 最后15秒：超级Boss登场
+- 击败超级Boss才能过关
 
 ### 4. 敌人生成系统
 ```javascript
@@ -264,10 +268,19 @@ function spawnEnemy() {
     const stageMultiplier = 1 + (gameState.stage - 1) * 0.3;
     const spawnRate = CONFIG.ENEMY_SPAWN_RATE * stageMultiplier;
     
-    // 敌人类型概率分布
-    // Boss: 3-8%
-    // 特殊敌人: 15-45%
-    // 普通敌人: 剩余概率
+    // 精英敌人类型概率分布 (移除普通Boss)
+    // 快速敌人: 20%
+    // 重型敌人: 15%
+    // 狙击手: 15%
+    // 轰炸机: 15%
+    // 普通敌人: 35%
+}
+
+function spawnStageBoss() {
+    // 时间剩余15秒时生成超级Boss
+    // 血量: 200 + (关卡-1) * 90
+    // 位置: 屏幕中央上方
+    // 特性: 不会退场，增强弹幕
 }
 ```
 

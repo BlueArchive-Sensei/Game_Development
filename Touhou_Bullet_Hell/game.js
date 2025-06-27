@@ -17,9 +17,12 @@ let gameState = {
     maxStage: 10,
     kills: 0,
     stageKills: 0,
-    stageTarget: 50,  // 大幅增加每关需要击杀的敌人数
+    stageTimeLimit: 90 * 60,  // 90秒 = 5400帧 (60fps)
+    stageTimeRemaining: 90 * 60,
     showStageComplete: false,
-    lastHealthBuyScore: 0  // 记录上次购买血量时的分数
+    lastHealthBuyScore: 0,
+    stageBossSpawned: false,  // 是否已生成关底boss
+    stageBoss: null          // 当前关底boss引用
 };
 
 // 玩家升级数据
@@ -272,6 +275,19 @@ class Enemy {
                 this.shootInterval = 50;
                 this.movePattern = 'boss';
                 break;
+                
+            case 'super_boss':
+                this.width = 80;
+                this.height = 80;
+                // 根据关卡设置血量 200-1000
+                this.hp = 200 + (gameState.stage - 1) * 90;  // 关卡1:200, 关卡10:1010
+                this.color = '#8b0000';  // 深红色
+                this.speed = 0.4;
+                this.shootInterval = 25;  // 更频繁的射击
+                this.movePattern = 'super_boss';
+                this.isStayingOnScreen = true;  // 不会退场
+                this.maxY = 150;  // 最大下移距离
+                break;
         }
         
         this.maxHp = this.hp;
@@ -313,6 +329,17 @@ class Enemy {
                 this.x = this.startX + Math.sin(this.timer * 0.08) * 120;
                 break;
                 
+            case 'super_boss':
+                // 超级boss只在屏幕上方活动，不会下移太多
+                if (this.y < this.maxY) {
+                    this.y += this.speed * 0.2;
+                }
+                // 左右移动模式
+                this.x = canvas.width / 2 + Math.sin(this.timer * 0.05) * 200;
+                // 确保不超出屏幕边界
+                this.x = Math.max(this.width/2, Math.min(canvas.width - this.width/2, this.x));
+                break;
+                
             default: // linear
                 this.y += this.speed;
                 break;
@@ -327,6 +354,10 @@ class Enemy {
             this.shootTimer = 0;
         }
         
+        // 超级boss不会因为位置而被清理，只有血量为0才会被清理
+        if (this.type === 'super_boss') {
+            return this.hp > 0;
+        }
         return this.y < canvas.height + this.height && this.hp > 0;
     }
     
@@ -343,6 +374,37 @@ class Enemy {
                         Math.sin(angle) * CONFIG.ENEMY_BULLET_SPEED,
                         'circle'
                     ));
+                }
+                break;
+                
+            case 'super_boss':
+                // 超级Boss增强弹幕模式
+                const superBulletCount = 12 + gameState.stage * 2;  // 随关卡增加弹幕数
+                const bulletSpeed = CONFIG.ENEMY_BULLET_SPEED * (1 + gameState.stage * 0.1);
+                
+                // 旋转弹幕
+                for (let i = 0; i < superBulletCount; i++) {
+                    const angle = (Math.PI * 2 * i) / superBulletCount + this.angle;
+                    enemyBullets.push(new EnemyBullet(
+                        this.x, this.y, 
+                        Math.cos(angle) * bulletSpeed,
+                        Math.sin(angle) * bulletSpeed,
+                        'super_boss'
+                    ));
+                }
+                
+                // 额外的追踪弹幕
+                if (this.timer % 30 === 0) {
+                    for (let i = 0; i < 3; i++) {
+                        const playerAngle = Math.atan2(player.y - this.y, player.x - this.x);
+                        const spread = (i - 1) * 0.2;
+                        enemyBullets.push(new EnemyBullet(
+                            this.x, this.y,
+                            Math.cos(playerAngle + spread) * bulletSpeed * 1.2,
+                            Math.sin(playerAngle + spread) * bulletSpeed * 1.2,
+                            'super_boss_tracking'
+                        ));
+                    }
                 }
                 break;
                 
@@ -460,12 +522,20 @@ class Enemy {
         
         // 血条
         if (this.hp < this.maxHp) {
-            const barWidth = this.width;
-            const barHeight = 4;
+            const barWidth = this.type === 'super_boss' ? this.width * 1.5 : this.width;
+            const barHeight = this.type === 'super_boss' ? 8 : 4;
             ctx.fillStyle = '#ff0000';
-            ctx.fillRect(-barWidth/2, -this.height/2 - 10, barWidth, barHeight);
+            ctx.fillRect(-barWidth/2, -this.height/2 - 15, barWidth, barHeight);
             ctx.fillStyle = '#00ff00';
-            ctx.fillRect(-barWidth/2, -this.height/2 - 10, barWidth * (this.hp / this.maxHp), barHeight);
+            ctx.fillRect(-barWidth/2, -this.height/2 - 15, barWidth * (this.hp / this.maxHp), barHeight);
+            
+            // Super Boss显示血量数字
+            if (this.type === 'super_boss') {
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(`${this.hp}/${this.maxHp}`, 0, -this.height/2 - 20);
+            }
         }
         
         // 发光效果
@@ -510,6 +580,15 @@ class EnemyBullet {
             case 'fast':
                 this.radius = 5;          // 增大最小弹幕
                 this.color = '#00ffff';
+                break;
+            case 'super_boss':
+                this.radius = 7;
+                this.color = '#8b0000';  // 深红色
+                break;
+            case 'super_boss_tracking':
+                this.radius = 6;
+                this.color = '#ff1493';  // 深粉色
+                this.life = 300;
                 break;
             default: // normal
                 this.radius = 5;          // 增大最小弹幕
@@ -596,21 +675,18 @@ function spawnEnemy() {
     if (Math.random() < spawnRate) {
         const x = Math.random() * (canvas.width - 100) + 50;
         
-        // 根据关卡决定敌人类型分布
+        // 根据关卡决定敌人类型分布 (移除普通boss，只有精英怪)
         const rand = Math.random();
         let type = 'normal';
         
-        const bossChance = Math.min(0.03 + (gameState.stage - 1) * 0.01, 0.08);
-        
-        if (rand < bossChance) {
-            type = 'boss';
-        } else if (rand < bossChance + 0.15) {
+        // 只生成精英怪，不生成boss
+        if (rand < 0.2) {
             type = 'fast';
-        } else if (rand < bossChance + 0.25) {
+        } else if (rand < 0.35) {
             type = 'heavy';
-        } else if (rand < bossChance + 0.35) {
+        } else if (rand < 0.5) {
             type = 'sniper';
-        } else if (rand < bossChance + 0.45) {
+        } else if (rand < 0.65) {
             type = 'bomber';
         } else {
             type = 'normal';
@@ -618,13 +694,24 @@ function spawnEnemy() {
         
         // 后期关卡增加特殊敌人概率
         if (gameState.stage >= 5) {
-            if (Math.random() < 0.1) {
+            if (Math.random() < 0.15) {
                 const specialTypes = ['heavy', 'sniper', 'bomber'];
                 type = specialTypes[Math.floor(Math.random() * specialTypes.length)];
             }
         }
         
         enemies.push(new Enemy(x, -50, type));
+    }
+}
+
+// 生成关底super_boss
+function spawnStageBoss() {
+    if (!gameState.stageBossSpawned) {
+        const x = canvas.width / 2;  // 从屏幕中央上方出现
+        gameState.stageBoss = new Enemy(x, -100, 'super_boss');
+        enemies.push(gameState.stageBoss);
+        gameState.stageBossSpawned = true;
+        showUpgradeMessage(`第${gameState.stage}关 超级Boss登场!`);
     }
 }
 
@@ -648,7 +735,9 @@ function checkHealthPurchase() {
 
 // 检查关卡完成
 function checkStageComplete() {
-    if (gameState.stageKills >= gameState.stageTarget) {
+    // 时间到了且super_boss已被击败
+    if (gameState.stageTimeRemaining <= 0 && 
+        (!gameState.stageBoss || gameState.stageBoss.hp <= 0)) {
         gameState.showStageComplete = true;
         gameState.isRunning = false;
     }
@@ -659,8 +748,10 @@ function nextStage() {
     if (gameState.stage < gameState.maxStage) {
         gameState.stage++;
         gameState.stageKills = 0;
-        gameState.stageTarget = 50 + (gameState.stage - 1) * 15;  // 大幅增加每关需要击杀的敌人数
+        gameState.stageTimeRemaining = gameState.stageTimeLimit;  // 重置时间
         gameState.showStageComplete = false;
+        gameState.stageBossSpawned = false;  // 重置boss状态
+        gameState.stageBoss = null;
         gameState.isRunning = true;
         
         // 清空敌人和子弹
@@ -713,8 +804,18 @@ function updateGame() {
     // 更新粒子
     particles = particles.filter(particle => particle.update());
     
-    // 生成敌人
-    spawnEnemy();
+    // 关卡时间倒计时
+    gameState.stageTimeRemaining--;
+    
+    // 当时间剩余15秒时生成super_boss
+    if (gameState.stageTimeRemaining === 15 * 60 && !gameState.stageBossSpawned) {
+        spawnStageBoss();
+    }
+    
+    // 时间未到或者boss未登场时继续生成普通敌人
+    if (gameState.stageTimeRemaining > 15 * 60 || !gameState.stageBossSpawned) {
+        spawnEnemy();
+    }
     
     // 碰撞检测 - 玩家子弹 vs 敌人
     for (let i = playerBullets.length - 1; i >= 0; i--) {
@@ -764,8 +865,14 @@ function updateGame() {
     checkHealthPurchase();
     
     // 更新分数显示
-    document.getElementById('score').textContent = 
-        `第${gameState.stage}关 | 分数: ${gameState.score} | 击杀: ${gameState.stageKills}/${gameState.stageTarget} | 血量: ${playerUpgrades.health}/${playerUpgrades.maxHealth}`;
+    const timeRemaining = Math.max(0, Math.ceil(gameState.stageTimeRemaining / 60));
+    let statusText = `第${gameState.stage}关 | 分数: ${gameState.score} | 剩余时间: ${timeRemaining}秒 | 血量: ${playerUpgrades.health}/${playerUpgrades.maxHealth}`;
+    
+    if (gameState.stageBossSpawned && gameState.stageBoss && gameState.stageBoss.hp > 0) {
+        statusText += ` | Boss血量: ${gameState.stageBoss.hp}`;
+    }
+    
+    document.getElementById('score').textContent = statusText;
 }
 
 // 渲染游戏
@@ -862,8 +969,13 @@ function renderGame() {
         
         ctx.fillStyle = '#ffffff';
         ctx.font = '24px Arial';
-        ctx.fillText(`击杀: ${gameState.stageKills}/${gameState.stageTarget}`, canvas.width/2, canvas.height/2);
+        ctx.fillText(`总击杀: ${gameState.stageKills}`, canvas.width/2, canvas.height/2);
         ctx.fillText(`总分数: ${gameState.score}`, canvas.width/2, canvas.height/2 + 30);
+        
+        if (gameState.stageBoss && gameState.stageBoss.hp <= 0) {
+            ctx.fillStyle = '#ffff00';
+            ctx.fillText(`超级Boss已击败!`, canvas.width/2, canvas.height/2 - 30);
+        }
         
         if (gameState.stage < gameState.maxStage) {
             ctx.font = '20px Arial';
@@ -891,8 +1003,10 @@ function startGame() {
     gameState.stage = 1;
     gameState.kills = 0;
     gameState.stageKills = 0;
-    gameState.stageTarget = 50;
+    gameState.stageTimeRemaining = gameState.stageTimeLimit;
     gameState.showStageComplete = false;
+    gameState.stageBossSpawned = false;
+    gameState.stageBoss = null;
     gameState.lastHealthBuyScore = 0;
     
     // 重置升级状态
