@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>东方Project风格弹幕游戏</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        
+        .game-container {
+            text-align: center;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+        }
+        
+        canvas {
+            border: 2px solid #00ffff;
+            background: linear-gradient(180deg, #000011, #001122);
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.5);
+        }
+        
+        .controls {
+            color: white;
+            margin-top: 15px;
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.8);
+        }
+        
+        .score {
+            color: #00ff00;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px rgba(0, 255, 0, 0.8);
+        }
+        
+        .game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            border: 2px solid #ff0000;
+            display: none;
+        }
+        
+        button {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 15px rgba(255, 107, 107, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="score" id="score">分数: 0</div>
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div class="controls">
+            <div>🎮 使用 WASD 或方向键移动</div>
+            <div>🔫 空格键发射子弹</div>
+            <div>⏸️ 按ESC暂停游戏</div>
+            <div>⏭️ 按Enter进入下一关</div>
+            <div>⚡ 每击杀5个敌人Power等级+1 (最高5级)!</div>
+            <div>❤️ 每3000分自动增加1点血量 (上限10)!</div>
+            <div>🎯 6种敌人类型，海量弹幕!</div>
+            <div>🏆 通过10个关卡获得胜利!</div>
+        </div>
+        
+        <div class="game-over" id="gameOver">
+            <h2>游戏结束</h2>
+            <p>最终分数: <span id="finalScore">0</span></p>
+            <button onclick="restartGame()">重新开始</button>
+        </div>
+    </div>
+    
+    <script src="game.js"></script>
+</body>
+</html> 
